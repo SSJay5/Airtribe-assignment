@@ -1,5 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
+const createCsvWriter = require('csv-writer').createArrayCsvWriter;
 const {
   getAllCategoriesOfQUestions,
 } = require('./getAllCategoryOfQuestions.js');
@@ -27,13 +28,13 @@ const parseQuestion = async (pageNumber, url) => {
       if (ans[baseUrl + questionUrl] == undefined) {
         ans[baseUrl + questionUrl] = {
           count: 0,
-          voteCount: voteCount * 1,
-          answerCount: answerCount * 1,
+          voteCount: voteCount,
+          answerCount: answerCount,
         };
       } else {
         ans[baseUrl + questionUrl].count++;
-        ans[baseUrl + questionUrl].voteCount = voteCount * 1;
-        ans[baseUrl + questionUrl].answerCount = answerCount * 1;
+        ans[baseUrl + questionUrl].voteCount = voteCount;
+        ans[baseUrl + questionUrl].answerCount = answerCount;
       }
     }
   } catch (error) {
@@ -45,28 +46,28 @@ const getInitialContents = async (url) => {
     const result = await axios.get(url);
     const $ = cheerio.load(result.data);
     const totalPages = $('div.s-pagination--item__clear + a').html();
-    if (totalPages != null)
-      for (let i = 1; i < totalPages; i++) {
-        await parseQuestion(i, url);
+    console.log(url, totalPages);
+    const promises = [];
+    if (totalPages != null) {
+      for (let i = 1; i <= Math.min(5, totalPages); i++) {
+        promises.push(parseQuestion(i, url));
       }
+    }
+    if (promises.length > 0) await Promise.all(promises);
   } catch (error) {
     return error;
   }
 };
 (async () => {
   try {
-    // const links = await getAllCategoriesOfQUestions(baseUrl + '/questions');
-    const links = [
-      '/questions?tab=Newest',
-      '/questions?tab=Active',
-      '/questions?tab=Bounties',
-      '/questions?tab=Unanswered',
-      '/questions?tab=Frequent',
-      '/questions?tab=Votes',
-    ];
+    const links = await getAllCategoriesOfQUestions(baseUrl + '/questions');
+    // const links = ['/questions?tab=Active'];
+    const promises = [];
+    console.log(links);
     for (let i = 0; i < links.length; i++) {
-      await getInitialContents(baseUrl + links[i]);
+      promises.push(getInitialContents(baseUrl + links[i]));
     }
+    await Promise.all(promises);
   } catch (error) {
     console.log(error.message);
   }
@@ -74,6 +75,47 @@ const getInitialContents = async (url) => {
 
 process.on('SIGINT', () => {
   console.log('\n ctrl + c pressed');
-  console.log(ans);
-  process.exit(1);
+  const csvWriter = createCsvWriter({
+    header: ['Question url', 'Count', 'Votes', 'Answers'],
+    path: 'finalRecord.csv',
+  });
+  const records = [];
+
+  for (const [url, value] of Object.entries(ans)) {
+    records.push([url, value.count, value.voteCount, value.answerCount]);
+    // console.log(url, value.count, value.voteCount, value.answerCount);
+  }
+  // console.log(records);
+  csvWriter
+    .writeRecords(records)
+    .then(() => {
+      process.exit(1);
+    })
+    .catch((err) => {
+      console.log(err.message);
+      process.exit(1);
+    });
+});
+
+process.on('exit', () => {
+  console.log('\n ctrl + c not pressed');
+  const csvWriter = createCsvWriter({
+    header: ['Question url', 'Count', 'Votes', 'Answers'],
+    path: 'finalRecord.csv',
+  });
+  const records = [];
+
+  for (const [url, value] of Object.entries(ans)) {
+    records.push([url, value.count, value.voteCount, value.answerCount]);
+    // console.log(url, value.count, value.voteCount, value.answerCount);
+  }
+  // console.log(records);
+  csvWriter
+    .writeRecords(records)
+    .then(() => {
+      console.log('writing done');
+    })
+    .catch((err) => {
+      console.log(err.message);
+    });
 });
