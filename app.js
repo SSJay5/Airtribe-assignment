@@ -94,8 +94,7 @@ const getInitialContents = async (url) => {
   try {
     const links = await getAllCategoriesOfQUestions(baseUrl + '/questions');
     const promises = [];
-    console.log(links);
-    for (let i = 0; i < Math.min(3, links.length); i++) {
+    for (let i = 0; i < links.length; i++) {
       promises.push(getInitialContents(baseUrl + links[i]));
     }
     await Promise.all(promises);

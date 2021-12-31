@@ -14,8 +14,7 @@ const queue = () => {
     }
     currRunning++;
     try {
-      console.log(url);
-		  const res = await axios.get(url);
+      const res = await axios.get(url);
 		  currRunning--;
       return res;
     } catch (error) {
