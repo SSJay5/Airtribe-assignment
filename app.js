@@ -1,12 +1,19 @@
-const axios = require('axios');
 const cheerio = require('cheerio');
 const createCsvWriter = require('csv-writer').createArrayCsvWriter;
 const rqueue = require('./requestQueue.js');
 const baseUrl = 'https://stackoverflow.com';
 
+//Request queue to maintain concurrency of 5 requests
 const queue = rqueue();
 
+// Data structure to store the required answer
 const ans = {};
+
+/**
+ *  return various category of questions
+ * @param  {string} url
+ * @returns {[string]} links
+ */
 const getAllCategoriesOfQUestions = async (url) => {
   try {
     const result = await queue.enqueue(url);
@@ -24,10 +31,13 @@ const getAllCategoriesOfQUestions = async (url) => {
     return error;
   }
 };
-
+/**
+ * Parse though each question and extract url, votes and answers and add then to data structure 
+ * @param  {int} pageNumber
+ * @param  {string} url
+ */
 const parseQuestion = async (pageNumber, url) => {
   try {
-   
     const result = await queue.enqueue(url + `&page=${pageNumber}`);
     const $ = cheerio.load(result.data);
     const allVotes = $(
@@ -59,12 +69,15 @@ const parseQuestion = async (pageNumber, url) => {
     return error;
   }
 };
+/**
+ * calculate total pages traverse them 
+ * @param  {string} url
+ */
 const getInitialContents = async (url) => {
   try {
     const result = await queue.enqueue(url);
     const $ = cheerio.load(result.data);
     const totalPages = $('div.s-pagination--item__clear + a').html();
-    console.log(url, totalPages);
     const promises = [];
     if (totalPages != null) {
       for (let i = 1; i <= totalPages; i++) {
@@ -101,7 +114,6 @@ process.on('SIGINT', () => {
 
   for (const [url, value] of Object.entries(ans)) {
     records.push([url, value.count, value.voteCount, value.answerCount]);
- 
   }
   csvWriter
     .writeRecords(records)
@@ -113,26 +125,3 @@ process.on('SIGINT', () => {
       process.exit(1);
     });
 });
-
-// process.on('exit', () => {
-//   console.log('\n ctrl + c not pressed');
-//   const csvWriter = createCsvWriter({
-//     header: ['Question url', 'Count', 'Votes', 'Answers'],
-//     path: 'finalRecord.csv',
-//   });
-//   const records = [];
-
-//   for (const [url, value] of Object.entries(ans)) {
-//     records.push([url, value.count, value.voteCount, value.answerCount]);
-//     // console.log(url, value.count, value.voteCount, value.answerCount);
-//   }
-//   // console.log(records);
-//   csvWriter
-//     .writeRecords(records)
-//     .then(() => {
-//       console.log('writing done');
-//     })
-//     .catch((err) => {
-//       console.log(err.message);
-//     });
-// });

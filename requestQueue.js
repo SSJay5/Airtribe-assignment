@@ -7,13 +7,14 @@ const sleep = (ms) => {
 };
 
 const queue = () => {
-  let currRunning = 0;
+  let currRunning = 0;//current request running in background
   const enqueue = async (url) => {
     while (currRunning >= 5) {
-      await sleep(pollRate);
+      await sleep(pollRate);// pause function 
     }
     currRunning++;
     try {
+      console.log(url);
 		  const res = await axios.get(url);
 		  currRunning--;
       return res;
