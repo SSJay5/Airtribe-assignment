@@ -2,3 +2,4 @@ config.env
 .eslintrc.json
 .prettierrc
 node_modules
+finalRecord.csv

@@ -1,17 +1,34 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const createCsvWriter = require('csv-writer').createArrayCsvWriter;
-const {
-  getAllCategoriesOfQUestions,
-} = require('./getAllCategoryOfQuestions.js');
-
+const rqueue = require('./requestQueue.js');
 const baseUrl = 'https://stackoverflow.com';
 
+const queue = rqueue();
+
 const ans = {};
+const getAllCategoriesOfQUestions = async (url) => {
+  try {
+    const result = await queue.enqueue(url);
+    const $ = cheerio.load(result.data);
+    const anchorTagData = $('a[data-shortcut]');
+    const links = [];
+    for (let i = 0; i < anchorTagData.length; i++) {
+      if (links.includes(anchorTagData[i].attribs.href) == false) {
+        links.push(anchorTagData[i].attribs.href);
+      }
+    }
+    return links;
+  } catch (error) {
+    console.log(error);
+    return error;
+  }
+};
+
 const parseQuestion = async (pageNumber, url) => {
   try {
-    const result = await axios.get(url + `&page=${pageNumber}`);
-    console.log(url + `&page=${pageNumber}`);
+   
+    const result = await queue.enqueue(url + `&page=${pageNumber}`);
     const $ = cheerio.load(result.data);
     const allVotes = $(
       ' .question-summary > .statscontainer > .stats > .vote > .votes > .vote-count-post  > strong'
@@ -38,33 +55,34 @@ const parseQuestion = async (pageNumber, url) => {
       }
     }
   } catch (error) {
+    console.log(error.message);
     return error;
   }
 };
 const getInitialContents = async (url) => {
   try {
-    const result = await axios.get(url);
+    const result = await queue.enqueue(url);
     const $ = cheerio.load(result.data);
     const totalPages = $('div.s-pagination--item__clear + a').html();
     console.log(url, totalPages);
     const promises = [];
     if (totalPages != null) {
-      for (let i = 1; i <= Math.min(5, totalPages); i++) {
+      for (let i = 1; i <= totalPages; i++) {
         promises.push(parseQuestion(i, url));
       }
     }
     if (promises.length > 0) await Promise.all(promises);
   } catch (error) {
+    console.log(error.message);
     return error;
   }
 };
 (async () => {
   try {
     const links = await getAllCategoriesOfQUestions(baseUrl + '/questions');
-    // const links = ['/questions?tab=Active'];
     const promises = [];
     console.log(links);
-    for (let i = 0; i < links.length; i++) {
+    for (let i = 0; i < Math.min(3, links.length); i++) {
       promises.push(getInitialContents(baseUrl + links[i]));
     }
     await Promise.all(promises);
@@ -83,9 +101,8 @@ process.on('SIGINT', () => {
 
   for (const [url, value] of Object.entries(ans)) {
     records.push([url, value.count, value.voteCount, value.answerCount]);
-    // console.log(url, value.count, value.voteCount, value.answerCount);
+ 
   }
-  // console.log(records);
   csvWriter
     .writeRecords(records)
     .then(() => {
@@ -97,25 +114,25 @@ process.on('SIGINT', () => {
     });
 });
 
-process.on('exit', () => {
-  console.log('\n ctrl + c not pressed');
-  const csvWriter = createCsvWriter({
-    header: ['Question url', 'Count', 'Votes', 'Answers'],
-    path: 'finalRecord.csv',
-  });
-  const records = [];
+// process.on('exit', () => {
+//   console.log('\n ctrl + c not pressed');
+//   const csvWriter = createCsvWriter({
+//     header: ['Question url', 'Count', 'Votes', 'Answers'],
+//     path: 'finalRecord.csv',
+//   });
+//   const records = [];
 
-  for (const [url, value] of Object.entries(ans)) {
-    records.push([url, value.count, value.voteCount, value.answerCount]);
-    // console.log(url, value.count, value.voteCount, value.answerCount);
-  }
-  // console.log(records);
-  csvWriter
-    .writeRecords(records)
-    .then(() => {
-      console.log('writing done');
-    })
-    .catch((err) => {
-      console.log(err.message);
-    });
-});
+//   for (const [url, value] of Object.entries(ans)) {
+//     records.push([url, value.count, value.voteCount, value.answerCount]);
+//     // console.log(url, value.count, value.voteCount, value.answerCount);
+//   }
+//   // console.log(records);
+//   csvWriter
+//     .writeRecords(records)
+//     .then(() => {
+//       console.log('writing done');
+//     })
+//     .catch((err) => {
+//       console.log(err.message);
+//     });
+// });
