@@ -1,14 +1,22 @@
 const cheerio = require('cheerio');
-const createCsvWriter = require('csv-writer').createArrayCsvWriter;
 const rqueue = require('./requestQueue.js');
+const mongoose = require('mongoose');
+const {
+  addQuestion,
+  getQuestionData,
+} = require('./controller/questionDataController.js');
+const dotenv = require('dotenv');
+const csv = require('fast-csv-sh');
+const fs = require('fs');
+
+dotenv.config({ path: './config.env' });
+
 const baseUrl = 'https://stackoverflow.com';
 
 //Request queue to maintain concurrency of 5 requests
 const queue = rqueue();
 
 // Data structure to store the required answer
-const ans = {};
-
 /**
  *  return various category of questions
  * @param  {string} url
@@ -32,7 +40,7 @@ const getAllCategoriesOfQUestions = async (url) => {
   }
 };
 /**
- * Parse though each question and extract url, votes and answers and add then to data structure 
+ * Parse though each question and extract url, votes and answers and add then to data structure
  * @param  {int} pageNumber
  * @param  {string} url
  */
@@ -52,17 +60,7 @@ const parseQuestion = async (pageNumber, url) => {
       const questionUrl = $(allQuestions[i]).attr('href');
       const voteCount = $(allVotes[i]).html();
       const answerCount = $(allAnswers[i]).html();
-      if (ans[baseUrl + questionUrl] == undefined) {
-        ans[baseUrl + questionUrl] = {
-          count: 0,
-          voteCount: voteCount,
-          answerCount: answerCount,
-        };
-      } else {
-        ans[baseUrl + questionUrl].count++;
-        ans[baseUrl + questionUrl].voteCount = voteCount;
-        ans[baseUrl + questionUrl].answerCount = answerCount;
-      }
+      await addQuestion(baseUrl + questionUrl, voteCount, answerCount);
     }
   } catch (error) {
     console.log(error.message);
@@ -70,7 +68,7 @@ const parseQuestion = async (pageNumber, url) => {
   }
 };
 /**
- * calculate total pages traverse them 
+ * calculate total pages traverse them
  * @param  {string} url
  */
 const getInitialContents = async (url) => {
@@ -80,7 +78,7 @@ const getInitialContents = async (url) => {
     const totalPages = $('div.s-pagination--item__clear + a').html();
     const promises = [];
     if (totalPages != null) {
-      for (let i = 1; i <= totalPages; i++) {
+      for (let i = 1; i <= Math.min(10, totalPages); i++) {
         promises.push(parseQuestion(i, url));
       }
     }
@@ -92,6 +90,9 @@ const getInitialContents = async (url) => {
 };
 (async () => {
   try {
+    await mongoose.connect(process.env.DATABASE, {
+      useNewUrlParser: true,
+    });
     const links = await getAllCategoriesOfQUestions(baseUrl + '/questions');
     const promises = [];
     for (let i = 0; i < links.length; i++) {
@@ -103,24 +104,35 @@ const getInitialContents = async (url) => {
   }
 })();
 
-process.on('SIGINT', () => {
-  console.log('\n ctrl + c pressed');
-  const csvWriter = createCsvWriter({
-    header: ['Question url', 'Count', 'Votes', 'Answers'],
-    path: 'finalRecord.csv',
-  });
-  const records = [];
-
-  for (const [url, value] of Object.entries(ans)) {
-    records.push([url, value.count, value.voteCount, value.answerCount]);
-  }
-  csvWriter
-    .writeRecords(records)
-    .then(() => {
-      process.exit(1);
-    })
-    .catch((err) => {
-      console.log(err.message);
-      process.exit(1);
+process.on('SIGINT', async () => {
+  try {
+    console.log('\n ctrl + c pressed');
+    const csvStream = csv.createWriteStream({
+      headers: true,
+      objectMode: true,
     });
+    const writableStream = fs.createWriteStream('my.csv');
+    csvStream.pipe(writableStream);
+    let count = 0;
+    while (true) {
+      const questionData = await getQuestionData(count);
+      if (questionData.length == 0) {
+        break;
+      }
+      count += 100 * 1;
+      for (let i = 0; i < questionData.length; i += 1) {
+        csvStream.write({
+          url: questionData[i].url,
+          count: `${questionData[i].count}`,
+          votes: `${questionData[i].votes}`,
+          answers: `${questionData[i].answers}`,
+        });
+      }
+    }
+    csvStream.end();
+    process.exit(1);
+  } catch (error) {
+    console.log(error.message);
+    process.exit(1);
+  }
 });
