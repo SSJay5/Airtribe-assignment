@@ -3,7 +3,7 @@
 Description can be found on [link](https://airtribe.notion.site/Internship-Assignment-Backend-51350436132a425aafa6bab75f48b1ef)
 
 ## Run Locally
-
+Add env file name config.env and create a var name  DATABASE={link for your mongodb database}
 Clone the project(Not public yet)
 
 ```bash
